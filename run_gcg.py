@@ -12,22 +12,26 @@ from gcg.algorithm import GCGConfig, run
 
 from config import NUM_SAMPLES, MODEL_NAME
 
-# 1. Load the model and tokenizer
+import os
+
 
 model_id = MODEL_NAME
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# todo 1. Load the model and tokenizer
 
 model = ...
 tokenizer = ...
 
 
-# 2. Load the harmful queries and target responses (this part is done for you)
+# 2. Load the harmful queries and target responses
 
 queries = jbb.read_dataset().goals[:NUM_SAMPLES]
 targets = jbb.read_dataset().targets[:NUM_SAMPLES]
 
 
-# 3. Run GCG (this part is done for you)
+# 3. Run GCG
 
 config = GCGConfig(
     num_steps=250,           # You can try to adjust these to lower the runtime but be sure it doesn't hinder the attack success.
@@ -51,8 +55,8 @@ print("Average loss: ", sum(losses) / len(losses))
 
 # 4. Save the adversarial suffixes
 
-os.makedirs("data", exist_ok=True)
-with open("data/suffixes.json", "w", encoding="utf-8") as f:
+os.makedirs(f"results/{MODEL_NAME}", exist_ok=True)
+with open(f"results/{MODEL_NAME}/suffixes.json", "w", encoding="utf-8") as f:
     json.dump(suffixes, f, indent=4, ensure_ascii=False)
 
-print("Suffixes saved to data/suffixes.json")
+print("Suffixes saved to results/suffixes.json")

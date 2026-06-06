@@ -1,6 +1,5 @@
 torch==2.5.1
 transformers==4.50.0
 datasets==3.4.1
-jailbreakbench==1.0.0
 litellm==1.53.7
 scipy==1.15.2

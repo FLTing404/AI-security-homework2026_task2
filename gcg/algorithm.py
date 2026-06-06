@@ -1,6 +1,21 @@
 """
 Lightweight implementation of the GCG algorithm (https://arxiv.org/abs/2307.15043).
-Source code credit: https://github.com/GraySwanAI/nanoGCG.
+
+================================ ASSIGNMENT ================================
+This is the homework version of GCG. Four core steps of the algorithm have
+been removed and replaced with `# TODO (k): ...` blocks. Your job is to read the
+GCG paper (https://arxiv.org/abs/2307.15043, especially Section 2 and
+Algorithm 1) and fill them in.
+
+The four TODOs follow the main loop of GCG:
+    TODO (1) + (2)  ->  compute the gradient of the loss w.r.t. each token choice
+    TODO (3)        ->  pick the top-k most promising replacement tokens
+    (given)         ->  randomly sample candidate suffixes from the top-k set
+    (given)         ->  evaluate the true loss of every candidate
+    TODO (4)        ->  greedily keep the single best candidate
+
+Each TODO is only a few lines. Do not change any other part of the file.
+===========================================================================
 """
 import copy
 import gc
@@ -147,7 +162,23 @@ def sample_ids_from_grad(
     if not_allowed_ids is not None:
         grad[:, not_allowed_ids.to(grad.device)] = float("inf")
 
-    topk_ids = (-grad).topk(topk, dim=1).indices
+    # ===================== TODO (3): top-k promising substitutions =====================
+    # GCG does NOT search the whole vocabulary at every position. Instead, for each
+    # token position it keeps only the `topk` candidate tokens that the (linearized)
+    # loss says are the most promising replacements -- this is the set X_i in the paper.
+    #
+    # `grad[i, v]` approximates how much the loss would CHANGE if position i were set
+    # to vocab token v. A large NEGATIVE value means swapping in token v is predicted
+    # to DECREASE the loss the most, i.e. it is the most promising replacement.
+    #
+    # See Section 3 of the paper (the "top-k token substitutions" step of Algorithm 2).
+    #
+    # Hint: look at the most negative entries of `grad` along the vocabulary dimension
+    #       (dim=1). torch.topk returns the LARGEST values, so think about the sign.
+    #
+    # Expected shape of topk_ids: (n_optim_tokens, topk)
+    topk_ids = torch.topk(-grad, topk, dim=1).indices  # TODO (3): your code here
+    # ===================================================================================
 
     sampled_ids_pos = torch.argsort(torch.rand((search_width, n_optim_tokens), device=grad.device))[..., :n_replace]
     sampled_ids_val = torch.gather(
@@ -354,8 +385,21 @@ class GCG:
 
                 if self.config.probe_sampling_config is None:
                     loss = find_executable_batch_size(self._compute_candidates_loss_original, batch_size)(input_embeds)
-                    current_loss = loss.min().item()
-                    optim_ids = sampled_ids[loss.argmin()].unsqueeze(0)
+                    
+                    # ============== TODO (4): greedy candidate selection ==============
+                    # GCG is a greedy coordinate algorithm: after scoring all candidates
+                    # this step, it commits to the SINGLE best one and discards the rest
+                    # (this is the "x := x_best" update at the end of Algorithm 1).
+                    #
+                    #   current_loss : the lowest loss among all candidates (a python float)
+                    #   optim_ids    : the candidate token ids achieving that lowest loss,
+                    #                  kept as shape (1, n_optim_ids) for the next iteration
+                    #
+                    # Hint: `loss.min()` / `loss.argmin()` index into `sampled_ids`.
+                    #       Remember to keep the batch dim, e.g. .unsqueeze(0).
+                    current_loss = loss.min().item()  # TODO (4a): your code here
+                    optim_ids = sampled_ids[loss.argmin()].unsqueeze(0)  # TODO (4b): your code here
+                    # ==================================================================
                 else:
                     current_loss, optim_ids = find_executable_batch_size(self._compute_candidates_loss_probe_sampling, batch_size)(
                         input_embeds, sampled_ids,
@@ -456,13 +500,35 @@ class GCG:
         model = self.model
         embedding_layer = self.embedding_layer
 
-        # Create the one-hot encoding matrix of our optimized token ids
-        optim_ids_onehot = torch.nn.functional.one_hot(optim_ids, num_classes=embedding_layer.num_embeddings)
-        optim_ids_onehot = optim_ids_onehot.to(model.device, model.dtype)
-        optim_ids_onehot.requires_grad_()
-
-        # (1, num_optim_tokens, vocab_size) @ (vocab_size, embed_dim) -> (1, num_optim_tokens, embed_dim)
-        optim_embeds = optim_ids_onehot @ embedding_layer.weight
+        # ============== TODO (1): build a DIFFERENTIABLE input from discrete tokens ==============
+        # GCG needs the gradient of the loss w.r.t. each token *choice*. But token ids are
+        # discrete integers -- we cannot differentiate w.r.t. an integer. The trick (Section 3
+        # of the paper) is to represent each optimized token as a one-hot vector over the
+        # vocabulary, and recover the usual input embedding by multiplying with the embedding
+        # matrix. Because the one-hot matrix is a continuous tensor, autograd can then tell us
+        # d(loss)/d(one-hot): a (n_optim, vocab_size) gradient saying how the loss would react
+        # to putting each vocab token in each position.
+        #
+        # Steps:
+        #   a) one-hot encode `optim_ids` over the vocabulary
+        #      (embedding_layer.num_embeddings is the vocab size)
+        #   b) cast it to (model.device, model.dtype) and mark requires_grad_()
+        #   c) multiply the one-hot matrix by the embedding weight matrix to get the embeddings
+        #
+        # Hint: torch.nn.functional.one_hot(...), and embedding_layer.weight is (vocab, embed_dim).
+        # Resulting shapes:
+        #   optim_ids_onehot : (1, n_optim_tokens, vocab_size)
+        #   optim_embeds     : (1, n_optim_tokens, embed_dim)
+        optim_ids_onehot = torch.nn.functional.one_hot(
+            optim_ids.squeeze(0),
+            num_classes=embedding_layer.num_embeddings,
+        ).unsqueeze(0)  # TODO (1a)
+        optim_ids_onehot = optim_ids_onehot.to(
+            device=model.device, dtype=model.dtype
+        ).requires_grad_()
+        # (remember to set dtype/device and requires_grad before the matmul)
+        optim_embeds = optim_ids_onehot @ embedding_layer.weight  # TODO (1b)
+        # =========================================================================================
 
         if self.prefix_cache:
             input_embeds = torch.cat([optim_embeds, self.after_embeds, self.target_embeds], dim=1)
@@ -492,7 +558,18 @@ class GCG:
 
         loss = compute_loss(shift_logits, shift_labels).mean(dim=-1)
 
-        optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
+        # ============== TODO (2): extract the token gradient via autograd ==============
+        # We now have a scalar `loss` that depends on `optim_ids_onehot` (through the model).
+        # Compute the gradient of `loss` with respect to the one-hot matrix you created in
+        # TODO (1). This gradient is exactly what `sample_ids_from_grad` consumes to choose
+        # promising token substitutions.
+        #
+        # Hint: torch.autograd.grad(outputs=[...], inputs=[...]) returns a tuple; take [0].
+        optim_ids_onehot_grad = torch.autograd.grad(
+            outputs=[loss],
+            inputs=[optim_ids_onehot],
+        )[0]  # TODO (2): your code here
+        # ===============================================================================
 
         return optim_ids_onehot_grad
 

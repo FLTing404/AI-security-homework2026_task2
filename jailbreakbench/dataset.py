@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 import pandas as pd
@@ -23,7 +24,8 @@ class JailbreakbenchDataset:
 
     def __init__(self, split: Literal["harmful", "benign"]):
         #add you path here TDDO
-        dataset: Dataset = load_dataset(f"/YOUR WORKSPACE/hm2026_task2/dataset", "behaviors", split=split)  # type: ignore
+        dataset_path = Path(__file__).resolve().parents[1] / "dataset"
+        dataset: Dataset = load_dataset(str(dataset_path), "behaviors", split=split)  # type: ignore
         df: pd.DataFrame = dataset.to_pandas()  # type: ignore
         self.df = df.drop(columns=["Index"])
         self.goals = self.df.Goal.to_list()

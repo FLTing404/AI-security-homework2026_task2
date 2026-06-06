@@ -2,7 +2,7 @@
 Global configuration for the project.
 """
 
-NUM_SAMPLES = 100                                      # Number of samples to evaluate and craft suffixes for
+NUM_SAMPLES = 3
 
-MODEL_NAME = "//YOUR WORKSPACE/hm2026_task2/model/Qwen/Qwen2.5-1.5B-Instruct"  
+MODEL_NAME = "/mnt/workspace/model/Qwen2.5-1.5B-Instruct"
 

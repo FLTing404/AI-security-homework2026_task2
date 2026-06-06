@@ -21,8 +21,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # todo 1. Load the model and tokenizer
 
-model = ...
-tokenizer = ...
+tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    torch_dtype=torch.float16,
+    device_map="auto",
+).eval()
 
 
 # 2. Load the harmful queries and target responses

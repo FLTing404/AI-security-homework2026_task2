@@ -10,7 +10,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from gcg.algorithm import GCGConfig, run
 
-from config import NUM_SAMPLES, MODEL_NAME
+from config import SAMPLE_INDICES, MODEL_NAME, RESULTS_DIR
 
 import os
 
@@ -31,8 +31,9 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # 2. Load the harmful queries and target responses
 
-queries = jbb.read_dataset().goals[:NUM_SAMPLES]
-targets = jbb.read_dataset().targets[:NUM_SAMPLES]
+dataset = jbb.read_dataset()
+queries = [dataset.goals[i] for i in SAMPLE_INDICES]
+targets = [dataset.targets[i] for i in SAMPLE_INDICES]
 
 
 # 3. Run GCG
@@ -59,8 +60,11 @@ print("Average loss: ", sum(losses) / len(losses))
 
 # 4. Save the adversarial suffixes
 
-os.makedirs(f"results/{MODEL_NAME}", exist_ok=True)
-with open(f"results/{MODEL_NAME}/suffixes.json", "w", encoding="utf-8") as f:
+os.makedirs(RESULTS_DIR, exist_ok=True)
+with open(f"{RESULTS_DIR}/suffixes.json", "w", encoding="utf-8") as f:
     json.dump(suffixes, f, indent=4, ensure_ascii=False)
+with open(f"{RESULTS_DIR}/sample_indices.json", "w", encoding="utf-8") as f:
+    json.dump(SAMPLE_INDICES, f, indent=4)
 
-print("Suffixes saved to results/suffixes.json")
+print(f"Suffixes saved to {RESULTS_DIR}/suffixes.json")
+print(f"Sample indices: {SAMPLE_INDICES}")

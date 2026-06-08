@@ -3,7 +3,7 @@ import json
 import torch
 import pandas as pd
 from tqdm.notebook import tqdm
-from config import MODEL_NAME
+from config import SAMPLE_INDICES, MODEL_NAME, RESULTS_DIR
 import jailbreakbench as jbb
 from transformers import AutoTokenizer, AutoModelForCausalLM
 model_id = MODEL_NAME
@@ -20,22 +20,25 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # ===== 1. 读取 suffixes =====
 
-suffix_path = f"results/{MODEL_NAME}/suffixes.json"
+suffix_path = f"{RESULTS_DIR}/suffixes.json"
+indices_path = f"{RESULTS_DIR}/sample_indices.json"
 
 with open(suffix_path, "r", encoding="utf-8") as f:
     suffixes = json.load(f)
 
-NUM_SAMPLES = len(suffixes)
+with open(indices_path, "r", encoding="utf-8") as f:
+    sample_indices = json.load(f)
 
-print(f"Loaded {NUM_SAMPLES} suffixes from {suffix_path}")
+print(f"Loaded {len(suffixes)} suffixes from {suffix_path}")
+print(f"JailbreakBench indices: {sample_indices}")
 
 
 # ===== 2. 读取对应 queries / targets =====
 
 dataset = jbb.read_dataset()
 
-queries = dataset.goals[:NUM_SAMPLES]
-targets = dataset.targets[:NUM_SAMPLES]
+queries = [dataset.goals[i] for i in sample_indices]
+targets = [dataset.targets[i] for i in sample_indices]
 
 
 # ===== 3. 修复 pad_token，避免 generate 报错 =====
@@ -102,7 +105,8 @@ for i, (query, target, suffix) in enumerate(zip(queries, targets, suffixes)):
     )
 
     rows.append({
-        "idx": i,
+        "idx": sample_indices[i],
+        "run_order": i,
         "query": query,
         "target": target,
         "suffix": suffix,
@@ -116,7 +120,7 @@ for i, (query, target, suffix) in enumerate(zip(queries, targets, suffixes)):
 
 df = pd.DataFrame(rows)
 
-out_dir = f"results/{MODEL_NAME}"
+out_dir = RESULTS_DIR
 os.makedirs(out_dir, exist_ok=True)
 
 csv_path = f"{out_dir}/comparison_outputs.csv"
